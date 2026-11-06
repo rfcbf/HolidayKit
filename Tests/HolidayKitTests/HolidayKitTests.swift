@@ -62,14 +62,78 @@ struct CatalogTests {
         #expect(days.count == 13)
     }
 
-    @Test("Every country has holidays, a unique two-letter code and a flag")
+    @Test("Every ISO country is listed once, with a two-letter code and a flag")
     func catalog() {
-        #expect(HolidayCatalog.countries.count >= 11)
-        #expect(HolidayCatalog.countries.allSatisfy { $0.code.count == 2 && !$0.holidays.isEmpty })
-        #expect(Set(HolidayCatalog.countries.map(\.code)).count == HolidayCatalog.countries.count)
+        let countries = HolidayCatalog.countries
+        #expect(countries.count >= 245)
+        #expect(countries.allSatisfy { $0.code.count == 2 && $0.flag.unicodeScalars.count == 2 })
+        #expect(Set(countries.map(\.code)).count == countries.count)
+        #expect(countries.filter(\.hasHolidays).count >= 230)
+        #expect(HolidayCatalog.country("EU") == nil)
         #expect(HolidayCatalog.country("BR")?.flag == "🇧🇷")
         #expect(HolidayCatalog.country("BR")?.localizedName(Locale(identifier: "pt_BR")) == "Brasil")
-        #expect(HolidayCatalog.sortedCountries(Locale(identifier: "en")).first?.code == "BR")
+        #expect(HolidayCatalog.sortedCountries(Locale(identifier: "pt_BR")).first?.code == "AF")
+        #expect(HolidayCatalog.dataSource.hasPrefix("python-holidays"))
+    }
+
+    @Test("Search by name in the locale, by English name and by code, ignoring accents")
+    func search() {
+        let portuguese = Locale(identifier: "pt_BR")
+        #expect(HolidayCatalog.search("japao", locale: portuguese).map(\.code) == ["JP"])
+        #expect(HolidayCatalog.search("Japan", locale: portuguese).map(\.code) == ["JP"])
+        #expect(HolidayCatalog.search("jp", locale: portuguese).map(\.code).contains("JP"))
+        #expect(HolidayCatalog.search("", locale: portuguese).count == HolidayCatalog.countries.count)
+        #expect(HolidayCatalog.search("zzzz", locale: portuguese).isEmpty)
+    }
+
+    @Test("Every entry of the generated file becomes a holiday")
+    func generated() throws {
+        let url = try #require(Bundle.module.url(forResource: "holidays", withExtension: "json"))
+        let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let countries = try #require(json["countries"] as? [String: [String: Any]])
+        for (code, country) in countries {
+            let entries = (country["holidays"] as? [Any])?.count ?? 0
+            #expect(HolidayCatalog.country(code)?.holidays.count == entries, "\(code)")
+        }
+    }
+
+    @Test("Japan: weekday rules, a holiday that moved by law and one that skipped a year")
+    func japan() throws {
+        let japan = try #require(HolidayCatalog.country("JP"))
+        let english = Locale(identifier: "en")
+        let days2026 = japan.holidayNames(in: 2026, locale: english)
+        #expect(days2026[CalendarDay(2026, 1, 12)] == "Coming of Age Day") // 2nd Monday
+        #expect(days2026[CalendarDay(2026, 2, 23)] == "Emperor's Birthday")
+        #expect(days2026[CalendarDay(2026, 7, 20)] == "Marine Day") // 3rd Monday
+        #expect(japan.holidayNames(in: 2018, locale: english)[CalendarDay(2018, 12, 23)] == "Emperor's Birthday")
+        #expect(!japan.holidayNames(in: 2019, locale: english).values.contains("Emperor's Birthday"))
+        #expect(japan.holidayNames(in: 2026, locale: Locale(identifier: "ja"))[CalendarDay(2026, 1, 1)] == "元日")
+        #expect(days2026[CalendarDay(2026, 1, 1)] == "New Year's Day")
+        #expect(japan.holidayNames(in: 2026, locale: Locale(identifier: "pt_BR"))[CalendarDay(2026, 1, 1)] == "Ano-Novo")
+    }
+
+    @Test("Orthodox Easter and lunar holidays")
+    func otherCalendars() throws {
+        #expect(Easter.orthodoxSunday(in: 2025) == CalendarDay(2025, 4, 20))
+        #expect(Easter.orthodoxSunday(in: 2026) == CalendarDay(2026, 4, 12))
+        #expect(Easter.orthodoxSunday(in: 2027) == CalendarDay(2027, 5, 2))
+        let greece = try #require(HolidayCatalog.country("GR")).holidays(in: 2026)
+        #expect(greece[CalendarDay(2026, 4, 13)] != nil) // Easter Monday (Orthodox)
+        let china = try #require(HolidayCatalog.country("CN")).holidays(in: 2026)
+        #expect(china[CalendarDay(2026, 2, 17)] != nil) // Lunar New Year
+        let india = try #require(HolidayCatalog.country("IN")).holidays(in: 2026)
+        #expect(india[CalendarDay(2026, 1, 26)] != nil) // Republic Day
+    }
+
+    @Test("Explicit dates only cover their years")
+    func explicitDates() {
+        let rule = HolidayRule.dates([CalendarDay(2026, 3, 20), CalendarDay(2027, 3, 10)])
+        #expect(rule.dates(in: 2026) == [CalendarDay(2026, 3, 20)])
+        #expect(rule.dates(in: 2030).isEmpty)
+        #expect(HolidayRule(encoded: "dates:20260320,20270310") == rule)
+        #expect(HolidayRule(encoded: "weekday:7,2,3") == .weekday(month: 7, weekday: 2, ordinal: 3))
+        #expect(HolidayRule(encoded: "orthodox:-2") == .orthodoxEaster(offset: -2))
+        #expect(HolidayRule(encoded: "lunar:1") == nil)
     }
 }
 
@@ -91,9 +155,9 @@ struct LanguageTests {
         #expect(thanksgiving.localizedName(Locale(identifier: "en_GB")) == "Thanksgiving Day")
     }
 
-    @Test("Every holiday key in the catalog has every supported language")
+    @Test("Every holiday key of the curated countries has every supported language")
     func coverage() {
-        for country in HolidayCatalog.countries {
+        for country in HolidayCatalog.curated {
             for holiday in country.holidays {
                 let names = HolidayNames.table[holiday.key]
                 #expect(names != nil, "missing key \(holiday.key)")

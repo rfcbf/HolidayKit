@@ -21,12 +21,17 @@ public struct HolidayCountry: Identifiable, Equatable, Hashable, Sendable {
         code
     }
 
+    /// Whether HolidayKit has national holidays for the country. Every ISO country is listed in
+    /// the catalog; a few (uninhabited territories, for example) have none.
+    public var hasHolidays: Bool {
+        !holidays.isEmpty
+    }
+
     /// Holidays of the year by date; when two fall on the same day, the first listed wins.
     public func holidays(in year: Int) -> [CalendarDay: Holiday] {
         var result: [CalendarDay: Holiday] = [:]
         for holiday in holidays {
-            let date = holiday.rule.date(in: year)
-            if result[date] == nil {
+            for date in holiday.dates(in: year) where result[date] == nil {
                 result[date] = holiday
             }
         }
@@ -52,21 +57,77 @@ public struct HolidayCountry: Identifiable, Equatable, Hashable, Sendable {
     }
 }
 
-/// The countries HolidayKit knows. National holidays only (no state or city ones): apps let people
-/// add their local holidays on top, see `BusinessDayCalendar`.
+/// Every country in ISO 3166-1 with its national holidays (no state or city ones: apps let
+/// people add their local holidays on top, see `BusinessDayCalendar`).
+///
+/// Eleven countries are curated by hand, with names in six languages (BR, PT, US, CA, GB, MX, ES,
+/// CO, FR, DE, IT). The others come from `Resources/holidays.json`, generated from the
+/// python-holidays project by `Scripts/generate_catalog.py`, with names in the country's language
+/// and in English.
 public enum HolidayCatalog {
+    /// The country with this ISO code, or `nil` for an unknown code.
     public static func country(_ code: String) -> HolidayCountry? {
-        countries.first { $0.code == code.uppercased() }
+        byCode[code.uppercased()]
     }
 
     /// The catalog sorted by the country's name in `locale`.
     public static func sortedCountries(_ locale: Locale = .current) -> [HolidayCountry] {
-        countries.sorted { $0.localizedName(locale).localizedStandardCompare($1.localizedName(locale)) == .orderedAscending }
+        countries
+            .map { (country: $0, name: $0.localizedName(locale)) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            .map(\.country)
     }
 
-    public static let countries: [HolidayCountry] = [
+    /// Countries whose name in `locale`, English name or code contains `text` (case and accents
+    /// ignored), sorted by name. Empty text returns every country.
+    public static func search(_ text: String, locale: Locale = .current) -> [HolidayCountry] {
+        let query = text.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return sortedCountries(locale) }
+        let english = Locale(identifier: "en")
+        return sortedCountries(locale).filter { country in
+            country.code.caseInsensitiveCompare(query) == .orderedSame
+                || country.localizedName(locale).localizedStandardContains(query)
+                || country.localizedName(english).localizedStandardContains(query)
+        }
+    }
+
+    /// The hand-curated countries.
+    public static let curated: [HolidayCountry] = [
         brazil, portugal, unitedStates, canada, unitedKingdom, mexico, spain, colombia, france, germany, italy
     ]
+
+    /// Every country, with or without holidays.
+    public static let countries: [HolidayCountry] = {
+        var result: [String: HolidayCountry] = [:]
+        for code in isoCountryCodes {
+            result[code] = HolidayCountry(code: code, language: "en", holidays: [])
+        }
+        for country in GeneratedCatalog.countries {
+            result[country.code] = country
+        }
+        for country in curated {
+            result[country.code] = country
+        }
+        return result.values.sorted { $0.code < $1.code }
+    }()
+
+    /// Version of the generated data ("python-holidays 0.83 (MIT)").
+    public static var dataSource: String {
+        GeneratedCatalog.source
+    }
+
+    private static let byCode: [String: HolidayCountry] = Dictionary(
+        uniqueKeysWithValues: countries.map { ($0.code, $0) }
+    )
+
+    /// ISO 3166-1 alpha-2 codes, without the reserved ones Foundation also lists (European Union,
+    /// United Nations, Canary Islands, Outlying Oceania...).
+    static let isoCountryCodes: [String] = {
+        let reserved: Set = ["AC", "CP", "CQ", "DG", "EA", "EU", "EZ", "IC", "QO", "TA", "UN", "ZZ"]
+        return Locale.Region.isoRegions
+            .map(\.identifier)
+            .filter { $0.count == 2 && $0.allSatisfy(\.isLetter) && !reserved.contains($0) }
+    }()
 
     static let brazil = HolidayCountry(code: "BR", language: "pt", holidays: [
         Holiday("new_year", "Confraternização Universal", .fixed(month: 1, day: 1)),

@@ -28,6 +28,9 @@ enum HolidayNames {
         "all_souls": ["en": "All Souls' Day", "pt": "Finados", "es": "Día de los Difuntos", "fr": "Jour des Morts", "de": "Allerseelen", "it": "Commemorazione dei defunti"],
         "immaculate_conception": ["en": "Immaculate Conception", "pt": "Imaculada Conceição", "es": "Inmaculada Concepción", "fr": "Immaculée Conception", "de": "Mariä Empfängnis", "it": "Immacolata Concezione"],
         "christmas": ["en": "Christmas Day", "pt": "Natal", "es": "Navidad", "fr": "Noël", "de": "Erster Weihnachtstag", "it": "Natale"],
+        "whit_sunday": ["en": "Whit Sunday", "pt": "Domingo de Pentecostes", "es": "Domingo de Pentecostés", "fr": "Pentecôte", "de": "Pfingstsonntag", "it": "Pentecoste"],
+        "christmas_eve": ["en": "Christmas Eve", "pt": "Véspera de Natal", "es": "Nochebuena", "fr": "Veille de Noël", "de": "Heiligabend", "it": "Vigilia di Natale"],
+        "new_years_eve": ["en": "New Year's Eve", "pt": "Véspera de Ano-Novo", "es": "Nochevieja", "fr": "Saint-Sylvestre", "de": "Silvester", "it": "San Silvestro"],
         "boxing_day": ["en": "Boxing Day", "pt": "Dia de Santo Estêvão", "es": "San Esteban", "fr": "Saint-Étienne", "de": "Zweiter Weihnachtstag", "it": "Santo Stefano"],
         "independence_day": ["en": "Independence Day", "pt": "Dia da Independência", "es": "Día de la Independencia", "fr": "Fête de l'Indépendance", "de": "Unabhängigkeitstag", "it": "Giorno dell'Indipendenza"],
         "constitution_day": ["en": "Constitution Day", "pt": "Dia da Constituição", "es": "Día de la Constitución", "fr": "Jour de la Constitution", "de": "Tag der Verfassung", "it": "Giorno della Costituzione"],
@@ -77,8 +80,8 @@ enum HolidayNames {
     // swiftlint:enable line_length
 
     /// The name of `key` in `language` ("pt", "en"...), falling back to English.
-    static func name(_ key: String, language: String) -> String? {
+    static func name(_ key: String, language: String, fallback: Bool = true) -> String? {
         guard let names = table[key] else { return nil }
-        return names[language] ?? names["en"]
+        return names[language] ?? (fallback ? names["en"] : nil)
     }
 }

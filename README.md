@@ -1,17 +1,18 @@
 # HolidayKit
 
-National holidays by country, calculated by rules (no per-year tables), with names in six
-languages, and business-day shifting for due dates: a date on a holiday — and, if enabled, on a
-weekend — moves to the next business day, the way bank slips and card statements work in Brazil.
+National holidays for every country in ISO 3166-1, with names in the country's language and in
+English (six languages for the most common holidays), and business-day shifting for due dates: a
+date on a holiday — and, if enabled, on a weekend — moves to the next business day, the way bank
+slips and card statements work in Brazil.
 
-Pure Swift, no dependencies, no resources. iOS 17, macOS 14, watchOS 10, tvOS 17, visionOS 1.
+Pure Swift, no dependencies. iOS 17, macOS 14, watchOS 10, tvOS 17, visionOS 1.
 
 ## Installation
 
 Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/rfcbf/HolidayKit.git", from: "1.0.0")
+.package(url: "https://github.com/rfcbf/HolidayKit.git", from: "2.0.0")
 ```
 
 or in Xcode: File › Add Package Dependencies… and paste the URL.
@@ -39,7 +40,9 @@ BusinessDayCalendar(
     recurringHolidays: [.init(month: 4, day: 21, name: "Aniversário de Brasília")]
 )
 
-HolidayCatalog.sortedCountries()                                // for a country picker
+HolidayCatalog.sortedCountries()                                // every country, by name
+HolidayCatalog.search("japao", locale: Locale(identifier: "pt_BR")) // [JP], for a search field
+HolidayCatalog.country("AQ")?.hasHolidays                       // false: listed, no holidays
 HolidayCatalog.country("BR")?.flag                              // "🇧🇷"
 HolidayCatalog.country("BR")?.localizedName()                   // "Brasil" / "Brazil"
 ```
@@ -49,29 +52,42 @@ never moves a day because of daylight saving. Convert with `CalendarDay(date)` a
 
 ## Countries
 
-| Code | Country | Notes |
-|---|---|---|
-| BR | Brazil | National holidays, Carnival (Monday and Tuesday) and Corpus Christi |
-| PT | Portugal | |
-| US | United States | Federal holidays |
-| CA | Canada | Federal holidays |
-| GB | United Kingdom | England and Wales bank holidays |
-| MX | Mexico | |
-| ES | Spain | National holidays |
-| CO | Colombia | Ley Emiliani (moved to Monday) |
-| FR | France | |
-| DE | Germany | Nationwide holidays |
-| IT | Italy | |
+`HolidayCatalog.countries` lists every ISO 3166-1 country and territory (about 250).
+
+- **Curated by hand** (names in six languages): Brazil, Portugal, United States, Canada, United
+  Kingdom (England and Wales), Mexico, Spain, Colombia (Ley Emiliani), France, Germany and Italy.
+  Brazil includes Carnival (Monday and Tuesday) and Corpus Christi.
+- **Generated** (about 225 more): national holidays from
+  [python-holidays](https://github.com/vacanza/holidays) (MIT), turned into rules by
+  `Scripts/generate_catalog.py` and shipped in `Resources/holidays.json`. Holidays of lunar
+  calendars (Eid, Lunar New Year, Diwali, Vesak) are explicit dates from 2015 to 2065.
+- A few territories have no holidays (`hasHolidays == false`) and are still listed, so a picker
+  can show them.
 
 National holidays only. State, regional and city holidays are left to the app, which can add the
-person's own on top (`customHolidays`, `recurringHolidays`).
+person's own on top (`customHolidays`, `recurringHolidays`). Observed (substitute) days are not
+included: `BusinessDayCalendar` already moves a date that falls on a weekend.
+
+### Keeping the data up to date
+
+Governments add, remove and move holidays. Once a month the `Update holidays` workflow installs
+the latest python-holidays, regenerates `holidays.json`, runs the tests and opens a pull request
+when anything changed. After review it is merged and released as a new minor version; apps get it
+by updating the package. To regenerate by hand:
+
+```sh
+python3 -m venv env && env/bin/pip install holidays
+env/bin/python -I Scripts/generate_catalog.py
+```
 
 ## Languages
 
-Each holiday has a stable `key` ("christmas", "br.tiradentes"), its `officialName` in the
-country's language, and translations in English, Portuguese, Spanish, French, German and Italian.
-`localizedName(locale)` returns the official name when the locale speaks the country's language,
-the translation otherwise, and English for any other language.
+Each holiday has a stable `key` ("christmas", "br.tiradentes", "jp.marine_day"), its
+`officialName` in the country's language and, for generated countries, its `englishName`.
+Holidays shared by many countries ("new_year", "christmas", "good_friday", "labour_day"...) and
+every holiday of the curated countries have translations in English, Portuguese, Spanish, French,
+German and Italian. `localizedName(locale)` returns the official name when the locale speaks the
+country's language, then the translation, then English, then the official name.
 
 ## Rules
 
@@ -82,14 +98,25 @@ the translation otherwise, and English for any other language.
 | `.weekday(month:weekday:ordinal:)` | Thanksgiving (4th Thursday), Memorial Day (last Monday) |
 | `.nextMonday(month:day:)` | Colombia's Ley Emiliani |
 | `.mondayBefore(month:day:)` | Canada's Victoria Day |
+| `.orthodoxEaster(offset:)` | Orthodox Good Friday (-2), Easter Monday (+1) |
+| `.dates([CalendarDay])` | Lunar and irregular holidays (explicit dates) |
+
+A holiday that moved by law has one entry per period, with `firstYear` and `lastYear`.
+
+## Migrating from 1.x
+
+- `HolidayRule.date(in:)` now returns an optional; use `dates(in:)` for every date of a year.
+- `HolidayCatalog.countries` lists every country; check `hasHolidays` where it matters.
+- `HolidayCatalog.curated` has the eleven hand-made countries of 1.x.
 
 ## Contributing
 
-To add a country, add a `HolidayCountry` to `HolidayCatalog` with keys for its holidays, add any
-new key to `HolidayNames` in all six languages, and add a test for a known year. The tests check
-that every key has every language. Corrections to dates or names are welcome — please cite an
+Fixes to generated countries are best sent to python-holidays, so every project gets them; the
+next monthly update brings them here. For the curated countries, edit `HolidayCatalog`, add any
+new key to `HolidayNames` in all six languages and add a test for a known year. Please cite an
 official source in the pull request.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The generated data comes from python-holidays, also MIT; see
+[NOTICE](NOTICE).

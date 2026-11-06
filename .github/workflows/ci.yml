@@ -7,6 +7,8 @@ on:
 
 jobs:
   test:
+    # Monthly data updates are tested inside the Update holidays workflow before they merge.
+    if: ${{ !startsWith(github.head_ref, 'update/python-holidays-') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
